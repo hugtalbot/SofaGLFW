@@ -467,6 +467,7 @@ void ImGuiGUIEngine::startFrame(sofaglfw::SofaGLFWBaseGUI* baseGUI)
             ImGui::Separator();
             if (ImGui::MenuItem("Exit"))
             {
+                sofa::simulation::node::unload(groot);
                 this->terminate();
                 return;
             }
@@ -832,6 +833,8 @@ void ImGuiGUIEngine::terminate()
     ImGui_ImplGlfw_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
+
+    glfwTerminate();
 }
 
 bool ImGuiGUIEngine::dispatchMouseEvents()

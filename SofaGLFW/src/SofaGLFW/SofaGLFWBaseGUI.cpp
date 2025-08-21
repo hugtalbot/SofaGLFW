@@ -665,6 +665,12 @@ void SofaGLFWBaseGUI::key_callback(GLFWwindow* window, int key, int scancode, in
     SOFA_UNUSED(scancode);
 
     const char keyName = handleArrowKeys(key);
+
+    std::cout << "key detected = " << keyName << std::endl;
+    printf("Key event - physical key (scancode): %d, logical key (layout-dependent): %d, mods: %d\n", scancode, key, mods);
+
+
+    
     const bool isCtrlKeyPressed = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
 
     const bool foundGUI = s_mapGUIs.contains(window);

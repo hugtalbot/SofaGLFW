@@ -31,12 +31,15 @@
 #include <sofa/helper/io/Image.h>
 #include <sofa/core/visual/VisualParams.h>
 #include <sofa/core/objectmodel/MouseEvent.h>
+#include <sofa/component/visual/BaseCamera.h>
 #include <sofa/simulation/Simulation.h>
 #include <sofa/simulation/Node.h>
 #include <sofa/gl/gl.h>
 #include <sofa/gl/Texture.h>
 
 #include <ranges>
+#include <chrono>
+#include <cmath>
 
 using namespace sofa;
 namespace sofaglfw
@@ -312,9 +315,125 @@ void SofaGLFWWindow::mouseMoveEvent(int xpos, int ypos, SofaGLFWBaseGUI* gui)
 void SofaGLFWWindow::mouseButtonEvent(int button, int action, int mods)
 {
     // Only change state on button press; release resets state to neutral
-        m_currentButton = button;
-        m_currentAction = action;
-        m_currentMods = mods;
+    m_currentButton = button;
+    m_currentAction = action;
+    m_currentMods = mods;
+
+    // Check if double-click : re-align the view
+    if(m_currentAction == GLFW_RELEASE)
+    {
+        static auto before = std::chrono::system_clock::now();
+        auto now = std::chrono::system_clock::now();
+        double diff_ms = std::chrono::duration <double, std::milli> (now - before).count();
+        before = now;
+        if(diff_ms>10 && diff_ms<200)
+        {
+            std::cout <<"Double click MF ! (mouseButtonEvent)" << std::endl;
+
+            sofa::type::Vec3 lookAt = m_currentCamera->getLookAt();
+            sofa::type::Vec3 position = m_currentCamera->getPosition();
+            sofa::type::Quat orientation = m_currentCamera->getOrientation();
+
+            std::cout<<"lookAt = " << lookAt <<std::endl;
+            std::cout<<"camPos = " << position <<std::endl;
+            std::cout<<"**orientation** = " << orientation <<std::endl;
+            std::cout<<"viewDir = " << (lookAt - position) <<std::endl;
+            std::cout<<"orientation (toEuler) = " << orientation.toEulerVector() <<std::endl;
+
+            sofa::type::Vec3 eulerAngles = orientation.toEulerVector();
+            eulerAngles.normalize();
+
+            double phi = 0.0;                
+            orientation.quatToAxis(eulerAngles, phi);
+            // 0.707 0 0 0.707 (-y)
+
+
+            std::cout<<"orientation (quatToAxis) = " << eulerAngles <<std::endl;
+            std::cout<<"orientation (quatToRotationVector) = " << orientation.quatToRotationVector() <<std::endl;
+            std::cout<<"orientation (inverseRotate) = " << orientation.inverseRotate(sofa::type::Vec3(0, -1, 0)) <<std::endl;
+
+            double value = 0.;
+            double absValue = 0.;
+
+            sofa::type::Vec3 tempEulerAngles = orientation.inverseRotate(sofa::type::Vec3(-1, 0, 0));
+            sofa::type::Vec3 newEulerAngles = sofa::type::Vec3(tempEulerAngles[0], tempEulerAngles[2], tempEulerAngles[1]);
+            std::cout<<"orientation (newEulerAngles X) = " << newEulerAngles <<std::endl;
+
+            alignCameraToClosestAxis(lookAt, newEulerAngles);
+        }
+    }
+}
+
+void SofaGLFWWindow::alignCameraToClosestAxis(const sofa::type::Vec3& lookAt, const sofa::type::Vec3& eulerAngles)
+{
+    // double threshold = std::numeric_limits<double>::epsilon();
+    
+    // List of world axes
+    std::vector<sofa::type::Vec3> axes = {
+        sofa::type::Vec3(1, 0, 0), sofa::type::Vec3(-1, 0, 0),
+        sofa::type::Vec3(0, 1, 0), sofa::type::Vec3(0, -1, 0),
+        sofa::type::Vec3(0, 0, 1), sofa::type::Vec3(0, 0, -1)
+    };
+
+    // Find the closest axis
+    sofa::type::Vec3::value_type bestDot = 1.0f;
+    sofa::type::Vec3 bestUp = sofa::type::Vec3(0, 0, 1); // Default up
+    int i = 0;
+    int selected = -1;
+    for (const sofa::type::Vec3& axis : axes)
+    {
+        sofa::type::Vec3::value_type d = std::abs(sofa::type::dot(axis, eulerAngles));
+        if (d < bestDot)
+        {
+            selected = i;
+            bestDot = d;
+            bestUp = axis;
+        }
+        i++;
+    }
+
+    if(selected == 0)
+        std::cout<<"best axis = X" <<std::endl;
+    else if(selected == 1)
+        std::cout<<"best axis = - X" <<std::endl;
+    else if(selected == 2)
+        std::cout<<"best axis = Y" <<std::endl;
+    else if(selected == 3)
+        std::cout<<"best axis = - Y" <<std::endl;
+    else if(selected == 4)
+        std::cout<<"best axis = Z" <<std::endl;
+    else if(selected == 5)
+        std::cout<<"best axis = - Z" <<std::endl;
+    else if(selected == -1)
+        std::cout<<"No Best !!" <<std::endl;
+    else
+        std::cout<<"Problemooooos" <<std::endl;
+    // std::cout<<"best axis = " << bestUp <<std::endl;
+
+    // // Recalculate camera orientation using lookAt and new up
+    // sofa::type::Vec3 forward = -bestUp;
+    // sofa::type::Vec3 up(0, 1., 0);
+
+    // // Prevent up vector from being parallel to forward
+    // if (std::abs(sofa::type::dot(forward, up)) > 0.99f)
+    //     up = sofa::type::Vec3(0, 0, 1.);
+    
+    // sofa::type::Vec3 right = sofa::type::cross(up,forward);
+    // right.normalize();
+    // up = sofa::type::cross(forward,right);
+    // up.normalize();
+
+    // sofa::type::Quat newCamOrientation = sofa::component::visual::BaseCamera::Quat::createQuaterFromFrame(right, up, forward);
+    // newCamOrientation.normalize();
+
+    // // Keep same distance from lookAt point
+    // sofa::type::Vec3::value_type dist = sofa::type::norm(camPosition - lookAt);
+    // sofa::type::Vec3 newCamPosition = lookAt - view * dist;
+
+    // std::cout<<"new orientation = " << newCamOrientation <<std::endl;
+
+
+    // m_currentCamera->setView(newCamPosition, newCamOrientation);
 }
 
 bool SofaGLFWWindow::mouseEvent(GLFWwindow* window, int width, int height,int button, int action, int mods, double xpos, double ypos) const
@@ -332,6 +451,8 @@ bool SofaGLFWWindow::mouseEvent(GLFWwindow* window, int width, int height,int bu
     mousepos.x = static_cast<int>(xpos);
     mousepos.y = static_cast<int>(ypos);
     auto rootNode = gui->getRootNode();
+
+    std::cout<<"Mouse event"<<std::endl;
 
     if (GLFW_MOD_SHIFT)
     {
@@ -354,25 +475,35 @@ bool SofaGLFWWindow::mouseEvent(GLFWwindow* window, int width, int height,int bu
             }
         }
         else if (action == GLFW_RELEASE)
-        {
-            if (action == GLFW_RELEASE)
+        {  
+            if (button == GLFW_MOUSE_BUTTON_LEFT)
             {
-                if (button == GLFW_MOUSE_BUTTON_LEFT)
-                {
-                    gui->getPickHandler()->handleMouseEvent(RELEASED, LEFT);
-                    gui->getPickHandler()->deactivateRay();
-                }
-                else if (button == GLFW_MOUSE_BUTTON_RIGHT)
-                {
-                    gui->getPickHandler()->handleMouseEvent(RELEASED, RIGHT);
-                }
-                else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
-                {
-                    gui->getPickHandler()->handleMouseEvent(RELEASED, MIDDLE);
-                }
+                gui->getPickHandler()->handleMouseEvent(RELEASED, LEFT);
+                gui->getPickHandler()->deactivateRay();
+            }
+            else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+            {
+                gui->getPickHandler()->handleMouseEvent(RELEASED, RIGHT);
+            }
+            else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+            {
+                gui->getPickHandler()->handleMouseEvent(RELEASED, MIDDLE);
             }
         }
         gui->moveRayPickInteractor(xpos, ypos);
+    }
+    else if (action == GLFW_RELEASE)
+    {
+        std::cout <<"Release !" << std::endl;
+
+        static auto before = std::chrono::system_clock::now();
+        auto now = std::chrono::system_clock::now();
+        double diff_ms = std::chrono::duration <double, std::milli> (now - before).count();
+        before = now;
+        if(diff_ms>10 && diff_ms<200)
+        {
+            std::cout <<"Double click MF !" << std::endl;
+        }
     }
     else
     {
@@ -384,7 +515,18 @@ bool SofaGLFWWindow::mouseEvent(GLFWwindow* window, int width, int height,int bu
 void SofaGLFWWindow::scrollEvent(double xoffset, double yoffset)
 {
     SOFA_UNUSED(xoffset);
-    const double yFactor = 10.f;
+    type::Vec3 min = m_currentCamera->d_minBBox.getValue();
+    type::Vec3 max = m_currentCamera->d_maxBBox.getValue();
+    type::Vec3 vec(max-min);
+
+    double length = vec.norm();
+    if (length == 0.)
+        length = 1.;
+    double distance = m_currentCamera->getDistance();
+    double ratioDistance = distance / 0.5*length;
+    double yFactor = (ratioDistance  * ratioDistance + 1) * 10.f;
+    if(yFactor > 300.)
+        yFactor = 300.f;
     core::objectmodel::MouseEvent me(core::objectmodel::MouseEvent::Wheel, static_cast<int>(yoffset * yFactor));
     m_currentCamera->manageEvent(&me);
 }

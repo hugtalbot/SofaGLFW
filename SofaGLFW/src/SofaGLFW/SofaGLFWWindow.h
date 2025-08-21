@@ -23,7 +23,6 @@
 #include <SofaGLFW/config.h>
 
 #include <sofa/simulation/fwd.h>
-#include <sofa/component/visual/BaseCamera.h>
 #include "SofaGLFWBaseGUI.h"
 
 struct GLFWwindow;
@@ -72,6 +71,8 @@ private:
     RGBAColor m_backgroundColor{ RGBAColor::black() };
     sofa::gl::Texture* m_currentBackgroundTexture { nullptr };
     
+    void alignCameraToClosestAxis(const sofa::type::Vec3& lookAt,  const sofa::type::Vec3& eulerAngles);
+
     struct Background
     {
         sofa::helper::io::Image* image {nullptr};
